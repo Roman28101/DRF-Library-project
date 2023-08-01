@@ -34,6 +34,14 @@ class BorrowingDetailSerializer(serializers.ModelSerializer):
             "user"
         )
 
+    def validate_book(self, attrs):
+        data = self.book.validate(attrs=attrs)
+        if data.inventory == 0:
+            raise serializers.ValidationError(
+                f"There is no {data.title} books left"
+            )
+        return data
+
     @transaction.atomic
     def create(self, validated_data):
         book_data = validated_data.pop("book")
