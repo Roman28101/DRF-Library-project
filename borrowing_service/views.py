@@ -1,14 +1,18 @@
+from datetime import date
+
 from django.shortcuts import render
-from rest_framework import viewsets, mixins
+from rest_framework import viewsets, mixins, status
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, \
     IsAuthenticated
+from rest_framework.response import Response
 
 from borrowing_service.models import Borrowing
 from borrowing_service.serializers import \
     BorrowingSerializer, BorrowingDetailSerializer
 
 
-class BorrowingDetailAPIView(
+class BorrowingAPIView(
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
@@ -41,3 +45,25 @@ class BorrowingDetailAPIView(
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    @action(
+        methods=["GET"],
+        detail=True,
+        url_path="return",
+        permission_classes=[IsAuthenticated]
+    )
+    def return_borrowing(self, request, pk=None):
+        borrowing = self.get_object()
+        serializer = self.get_serializer(borrowing, data=request.data)
+        if borrowing.actual_return_date is not None:
+            return Response(
+                {"detail": "Borrowing already returned"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        borrowing.actual_return_date = date.today()
+        borrowing.book.inventory += 1
+        borrowing.book.save()
+        borrowing.save()
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
