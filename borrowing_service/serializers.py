@@ -45,6 +45,8 @@ class BorrowingDetailSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         book_data = validated_data.pop("book")
+        book_data.inventory -= 1
+        book_data.save()
         borrowing = Borrowing.objects.create(
             **book_data)
 
