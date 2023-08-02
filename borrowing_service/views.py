@@ -8,6 +8,8 @@ from rest_framework.permissions import IsAdminUser, \
 from rest_framework.response import Response
 
 from borrowing_service.models import Borrowing
+from borrowing_service.send_message_to_telegram import \
+    send_to_telegram
 from borrowing_service.serializers import \
     BorrowingSerializer, BorrowingDetailSerializer
 
@@ -44,7 +46,12 @@ class BorrowingAPIView(
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        borrowing = serializer.save(user=self.request.user)
+        message = (
+            f"Dear User {borrowing.user.email} "
+            f"you borrow a book: Book {borrowing.book.title}, "
+            f"date: {borrowing.borrowing_date}")
+        send_to_telegram(message)
 
     @action(
         methods=["GET"],
