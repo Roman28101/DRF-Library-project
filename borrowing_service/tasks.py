@@ -11,7 +11,7 @@ def check_overdue_borrowings():
     tomorrow = today + timedelta(days=1)
     overdue_borrowings = Borrowing.objects.filter(
              expected_return_date__lte=tomorrow,
-             return_date__isnull=True
+             actual_return_date__isnull=True
     )
 
     if overdue_borrowings.exists():

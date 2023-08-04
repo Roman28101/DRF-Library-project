@@ -1,6 +1,9 @@
 from datetime import date
 
 from django.shortcuts import render
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, \
+    OpenApiParameter
 from rest_framework import viewsets, mixins, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, \
@@ -44,6 +47,26 @@ class BorrowingAPIView(
             queryset = queryset.filter(actual_return_date__isnull=True)
 
         return queryset
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="user",
+                type= {"type": "number"},
+                description="Filter by user id and borrowing status(ex. ?user=1&is_active=true), "
+                            "or all users (ex. ?user&is_active)",
+                required=False
+            ),
+            OpenApiParameter(
+                name="is_active",
+                type=OpenApiTypes.BOOL,
+                description="Filter by borrowing status(ex. ?is_active=true)",
+                required=False
+            ),
+        ]
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         borrowing = serializer.save(user=self.request.user)
