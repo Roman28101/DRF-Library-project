@@ -41,16 +41,3 @@ python manage.py runserver
 * Only Admin can add books
 * Authenticated users can manage borrowings
 * Filtering borrowings by user, and status
-
-
-
-
-## For testing features
-
-You can use my telegram bot for testing all the features.
-* for .env file: 
-```shell
-DJANGO_SECRET_KEY = hny-dx6_b@@nx_gcqov6k9&6)c741q=cd_f2059c4n_nztr!6#
-TELEGRAM_TOKEN = 6419958918:AAHDb2INDdRy3QVSQCbkc9Dj8SZoa22wEeI
-CHAT_ID = 5380762303
-```
