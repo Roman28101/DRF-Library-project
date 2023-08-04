@@ -6,7 +6,7 @@ from django.db import models
 from django.utils.text import slugify
 
 
-def movie_image_file_path(instance, filename):
+def book_cover_file_path(instance, filename):
     _, extension = os.path.splitext(filename)
     filename = f"{slugify(instance.title)}-{uuid.uuid4()}{extension}"
 
@@ -16,7 +16,7 @@ def movie_image_file_path(instance, filename):
 class Book(models.Model):
     title = models.CharField(max_length=255)
     author = models.CharField(max_length=255)
-    cover = models.ImageField(null=True, upload_to=movie_image_file_path)
+    cover = models.ImageField(null=True, upload_to=book_cover_file_path)
     inventory = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     daily_fee = models.DecimalField(max_digits=5, decimal_places=2)
 

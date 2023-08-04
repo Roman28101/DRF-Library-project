@@ -52,10 +52,9 @@ class BorrowingAPIView(
         parameters=[
             OpenApiParameter(
                 name="user",
-                type= {"type": "number"},
-                description="Filter by user id and borrowing status(ex. ?user=1&is_active=true), "
-                            "or all users (ex. ?user&is_active)",
-                required=False
+                type={"type": "number"},
+                description="Filter by user id (ex. ?user=1), "
+                            "or all users (ex. ?user)",
             ),
             OpenApiParameter(
                 name="is_active",
