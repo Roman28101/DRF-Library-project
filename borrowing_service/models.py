@@ -7,7 +7,7 @@ from book_service.models import Book
 
 class Borrowing(models.Model):
     borrowing_date = models.DateField(auto_now_add=True)
-    expected_return_date = models.DateField()
+    expected_return_date = models.DateField(default=None, null=True, blank=True)
     actual_return_date = models.DateField(null=True, blank=True)
     book = models.ForeignKey(
         Book, on_delete=models.CASCADE, related_name="borrowings"
@@ -18,7 +18,10 @@ class Borrowing(models.Model):
 
     @staticmethod
     def validate_borrowing(borrowing_date, expected_return_date, error_to_raise):
-        if not (expected_return_date > borrowing_date):
+        if (
+                expected_return_date and borrowing_date
+                and not (expected_return_date > borrowing_date)
+        ):
             raise error_to_raise(
                 "Expected return date must be not earlier than borrowing date"
             )

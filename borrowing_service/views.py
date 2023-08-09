@@ -1,3 +1,4 @@
+from django.db.models import Q
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework import viewsets, mixins, status
@@ -9,11 +10,12 @@ from borrowing_service.models import Borrowing
 from borrowing_service.serializers import (
     BorrowingSerializer,
     BorrowingDetailSerializer,
-    ReturnBorrowingSerializer
+    ReturnBorrowingSerializer,
+    BorrowingListSerializer
 )
 
 
-class BorrowingAPIView(
+class BorrowingViewSet(
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
@@ -21,9 +23,11 @@ class BorrowingAPIView(
 ):
     queryset = Borrowing.objects.select_related("book", "user")
     serializer_class = BorrowingSerializer
-    permission_classes = (IsAdminUser, IsAuthenticated)
+    permission_classes = (IsAuthenticated,)
 
     def get_serializer_class(self):
+        if self.action == "list":
+            return BorrowingListSerializer
         if self.action == "retrieve":
             return BorrowingDetailSerializer
         if self.action == "return_borrowing":
@@ -34,19 +38,21 @@ class BorrowingAPIView(
     def get_queryset(self):
         queryset = self.queryset
         user = self.request.user
-        is_active = self.request.query_params.get("is_active", None)
         user_id = self.request.query_params.get("user_id", None)
+        is_active = self.request.query_params.get("is_active", None)
 
-        if user.is_stuff and user_id:
-            queryset = queryset.filter(user_id=int(user_id))
+        if user.is_staff and user_id:
+            queryset = queryset.filter(user__id=int(user_id))
         elif not user.is_staff:
             queryset = queryset.filter(user=user)
         if is_active is not None:
-            if is_active:
-                queryset = queryset.filter(actual_return_date__isnull=True)
-            queryset = queryset.filter(actual_return_date__isnull=False)
+            is_active = bool(is_active.lower() == "true")
+            queryset = queryset.filter(
+                Q(actual_return_date__isnull=True) if is_active else
+                Q(actual_return_date__isnull=False)
+            )
 
-        return queryset
+        return queryset.distinct()
 
     @extend_schema(
         parameters=[
@@ -59,7 +65,9 @@ class BorrowingAPIView(
             OpenApiParameter(
                 name="is_active",
                 type=OpenApiTypes.BOOL,
-                description="Filter by borrowing status(ex. ?is_active=true)",
+                description="Filter by borrowing status"
+                            "(use ?is_active=true is you want to filter by active borrowings, "
+                            "if you want to see returned borrowings use ?is_active=false)",
                 required=False
             ),
         ]

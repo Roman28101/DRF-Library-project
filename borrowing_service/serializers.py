@@ -16,7 +16,29 @@ class BorrowingSerializer(serializers.ModelSerializer):
             "id",
             "user",
             "book",
-            "borrow_date",
+            "borrowing_date",
+            "expected_return_date",
+            "actual_return_date"
+        )
+        read_only_fields = ("id", "user")
+
+
+class BorrowingListSerializer(serializers.ModelSerializer):
+    book = serializers.CharField(source="book.title", read_only=True)
+
+    class Meta:
+        model = Borrowing
+        fields = (
+            "id",
+            "user",
+            "book",
+            "borrowing_date",
+            "expected_return_date",
+            "actual_return_date"
+        )
+        read_only_fields = (
+            "id",
+            "user",
             "expected_return_date",
             "actual_return_date"
         )
@@ -32,10 +54,23 @@ class BorrowingDetailSerializer(serializers.ModelSerializer):
             "borrowing_date",
             "expected_return_date",
             "actual_return_date",
-            "daily_fee",
             "book",
             "user"
         )
+
+    @transaction.atomic
+    def create(self, validated_data):
+        book_instance = validated_data["book"]
+        book_instance.inventory -= 1
+        book_instance.save()
+        borrowing = Borrowing.objects.create(**validated_data)
+        message = (
+            f"Dear User {borrowing.user.email} "
+            f"you borrow a book: Book {borrowing.book.title}, "
+            f"date: {borrowing.borrowing_date}")
+        send_to_telegram(message)
+
+        return borrowing
 
     def validate_book(self, attrs):
         data = self.book.validate(attrs=attrs)
@@ -45,26 +80,13 @@ class BorrowingDetailSerializer(serializers.ModelSerializer):
             )
         return data
 
-    @transaction.atomic
-    def create(self, validated_data):
-        book_data = validated_data.pop("book")
-        book_data.inventory -= 1
-        book_data.save()
-        borrowing = Borrowing.objects.create(**book_data)
-        message = (
-            f"Dear User {borrowing.user.email} "
-            f"you borrow a book: Book {borrowing.book.title}, "
-            f"date: {borrowing.borrowing_date}")
-        send_to_telegram(message)
-
-        return borrowing
-
 
 class ReturnBorrowingSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Borrowing
         fields = ("id", "actual_return_date")
+        read_only_fields = ("id", "actual_return_date")
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -74,9 +96,7 @@ class ReturnBorrowingSerializer(serializers.ModelSerializer):
             )
         return attrs
 
-    def create(self, validated_data):
-        borrowing = super().create(validated_data)
-        borrowing.return_date = date.today()
-        borrowing.save()
-
-        return borrowing
+    def update(self, instance, validated_data):
+        instance.actual_return_date = date.today()
+        instance.save()
+        return instance

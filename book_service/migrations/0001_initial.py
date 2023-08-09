@@ -28,7 +28,7 @@ class Migration(migrations.Migration):
                 (
                     "cover",
                     models.ImageField(
-                        null=True, upload_to=book_service.models.movie_image_file_path
+                        null=True, upload_to=book_service.models.book_cover_file_path
                     ),
                 ),
                 (

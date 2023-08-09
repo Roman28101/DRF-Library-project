@@ -1,12 +1,11 @@
-from django.urls import include
 from rest_framework import routers
 
 
-from borrowing_service.views import BorrowingAPIView
+from borrowing_service.views import BorrowingViewSet
 
 router = routers.DefaultRouter()
-router.register("borrowings", BorrowingAPIView)
+router.register("borrowings", BorrowingViewSet)
 
-urlpatterns = include(router.urls)
+urlpatterns = router.urls
 
 app_name = "borrowing_service"
