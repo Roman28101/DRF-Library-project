@@ -1,3 +1,7 @@
+from datetime import date, timedelta
+from unittest.mock import patch
+
+from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -7,8 +11,8 @@ from rest_framework.test import APIClient
 from book_service.models import Book
 from book_service.serializers import BookSerializer
 from borrowing_service.models import Borrowing
-from borrowing_service.serializers import \
-    BorrowingSerializer, BorrowingListSerializer
+from borrowing_service.serializers import BorrowingListSerializer
+from borrowing_service.tasks import check_overdue_borrowings
 
 BORROWING_URL = reverse("borrowing_service:borrowing-list")
 
@@ -46,11 +50,17 @@ class AuthenticatedBorrowingTests(TestCase):
             "user1234",
         )
         self.client.force_authenticate(self.user)
-        self.book = some_book(title="LOTR")
-        self.serializer = BookSerializer(self.book)
+        self.book1 = some_book()
+        self.book2 = some_book(title="LOTR")
+        self.serializer = BookSerializer(self.book1)
         self.borrowing = Borrowing.objects.create(
-            book=self.book,
+            book=self.book1,
             user=self.user
+        )
+        self.borrowing2 = Borrowing.objects.create(
+            book=self.book2,
+            user=self.user,
+            actual_return_date=date.today(),
         )
 
     def test_list_borrowings(self):
@@ -62,120 +72,78 @@ class AuthenticatedBorrowingTests(TestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(res.data, serializer.data)
 
-#     def test_play_filter(self):
-#         play_empty = some_play()
-#         play1 = some_play()
-#         play2 = some_play()
-#
-#         genre = Genre.objects.create(name="drama")
-#
-#         actor = Actor.objects.create(
-#             first_name="Christoph",
-#             last_name="Waltz"
-#         )
-#
-#         play1.actors.add(actor)
-#         play2.actors.add(actor)
-#         play2.genres.add(genre)
-#
-#         res_actors = self.client.get(
-#             PLAY_URL,
-#             {"actors": f"{actor.id}, {actor.id}"}
-#         )
-#         res_actors_genres = self.client.get(
-#             PLAY_URL,
-#             {"actors": f"{actor.id}"},
-#             {"genres": f"{genre.id}"}
-#         )
-#
-#         serializer1 = PlayListSerializer(play_empty)
-#         serializer2 = PlayListSerializer(play1)
-#         serializer3 = PlayListSerializer(play2)
-#
-#         self.assertIn(serializer2.data, res_actors.data)
-#         self.assertIn(serializer3.data, res_actors_genres.data)
-#         self.assertNotIn(serializer1.data, res_actors.data)
-#         self.assertNotIn(serializer1.data, res_actors_genres.data)
-#
-#     def test_retrieve_play_detail(self):
-#         play = some_play()
-#         play.actors.add(Actor.objects.create(
-#             first_name="Jamie",
-#             last_name="Foxx")
-#         )
-#         play.genres.add(Genre.objects.create(name="action"))
-#
-#         url = detail_url(play.id)
-#         res = self.client.get(url)
-#
-#         serializer = PlayDetailSerializer(play)
-#
-#         self.assertEqual(res.status_code, status.HTTP_200_OK)
-#         self.assertEqual(res.data, serializer.data)
-#
-#     def create_play_forbidden(self):
-#         payload = {
-#             "title": "The Greatest Showman",
-#             "description": "Many good songs",
-#         }
-#
-#         res = self.client.post(PLAY_URL, payload)
-#         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
-#
-#
-# class AdminPlayTests(TestCase):
-#     def setUp(self):
-#         self.client = APIClient()
-#         self.user = get_user_model().objects.create_user(
-#             "admin@test.com",
-#             "admin1234",
-#             is_staff=True,
-#         )
-#         self.client.force_authenticate(self.user)
-#
-#     def test_create_play(self):
-#
-#         payload = {
-#             "title": "Play",
-#             "description": "Info about play",
-#         }
-#
-#         res = self.client.post(PLAY_URL, payload)
-#         play = Play.objects.get(id=res.data["id"])
-#
-#         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
-#         for key in payload:
-#             self.assertEqual(payload[key], getattr(play, key))
-#
-#     def test_create_play_actors_genres(self):
-#         genre = Genre.objects.create(name="comedy")
-#         actor = Actor.objects.create(
-#             first_name="Hugh",
-#             last_name="Jackman"
-#         )
-#
-#         payload = {
-#             "title": "Play",
-#             "description": "Info about play",
-#             "genres": genre.id,
-#             "actors": actor.id
-#         }
-#
-#         res = self.client.post(PLAY_URL, payload)
-#         movie = Play.objects.get(id=res.data["id"])
-#         genres = movie.genres.all()
-#         actors = movie.actors.all()
-#
-#         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
-#         self.assertEqual(genres.count(), 1)
-#         self.assertIn(genre, genres)
-#         self.assertEqual(actors.count(), 1)
-#         self.assertIn(actor, actors)
-#
-#     def test_delete_not_allowed(self):
-#         play = some_play()
-#         url = detail_url(play.id)
-#
-#         res = self.client.delete(url)
-#
-#         self.assertEqual(res.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+    def test_retrieve_borrowings_authenticated(self):
+        response = self.client.get(detail_url(self.borrowing.id))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class AdminPlayTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_user(
+            "admin@test.com",
+            "admin1234",
+            is_staff=True,
+        )
+
+        self.client.force_authenticate(self.user)
+        self.book1 = some_book()
+        self.book2 = some_book(title="Winnie The Pooh")
+        self.serializer1 = BookSerializer(self.book1)
+        self.serializer2 = BookSerializer(self.book2)
+        self.borrowing1 = Borrowing.objects.create(
+            book=self.book1,
+            user=self.user
+        )
+        self.borrowing2 = Borrowing.objects.create(
+            book=self.book2,
+            user=self.user,
+            actual_return_date=date.today(),
+        )
+
+    def test_borrowings_filter(self):
+        self.client.force_authenticate(self.user)
+        res_user = self.client.get(
+            BORROWING_URL,
+            {"user_id": f"{self.user.id}"}
+        )
+
+        res_user_is_active = self.client.get(
+            BORROWING_URL,
+            {"user_id": f"{self.user.id}"},
+            {"is_active": f"True"}
+        )
+
+        serializer1 = BorrowingListSerializer(self.borrowing1)
+        serializer2 = BorrowingListSerializer(self.borrowing2)
+
+
+        self.assertIn(serializer1.data, res_user.data)
+        self.assertIn(serializer1.data, res_user_is_active.data)
+        self.assertIn(serializer2.data, res_user_is_active.data)
+
+
+class CheckOverdueBorrowingsTest(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            email="test@user.com",
+            password="testpassword"
+        )
+        self.book = Book.objects.create(
+            title="The Witcher",
+            author="Andrzej Sapkowski",
+            daily_fee=0.6
+        )
+        self.borrowing = Borrowing.objects.create(
+            user=self.user,
+            book=self.book,
+            expected_return_date=timezone.now().date() - timedelta(days=1)
+        )
+
+    @patch("borrowing_service.tasks.send_to_telegram")
+    def test_check_overdue_borrowings(self, mock_send_to_telegram):
+        check_overdue_borrowings()
+
+        mock_send_to_telegram.assert_called_with(
+            f"Overdue borrowing: Book {self.borrowing.book.title} borrowed by {self.borrowing.user.email}"
+        )
